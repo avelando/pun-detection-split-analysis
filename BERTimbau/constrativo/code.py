@@ -59,14 +59,14 @@ label2id = {
 
 SEED = 40
 MAX_LENGTH = 256
-NUM_EPOCHS = 8
+NUM_EPOCHS = 6
 LEARNING_RATE = 2e-5
 TRAIN_BATCH_SIZE = 8
 EVAL_BATCH_SIZE = 8
 WEIGHT_DECAY = 0.01
 WARMUP_RATIO = 0.1
 MAX_GRAD_NORM = 1.0
-EARLY_STOPPING_PATIENCE = 3
+EARLY_STOPPING_PATIENCE = 2
 
 ALPHA_PAIR_LOSS = 0.2
 PAIR_MARGIN = 0.5
@@ -192,9 +192,30 @@ def validate_complete_pairs(dataframe, split_name):
     print(f"{split_name}: {len(pair_sizes)} pairs, {len(dataframe)} examples.")
 
 
+def validate_suffix_label_consistency(dataframe, split_name):
+    invalid_rows = dataframe[
+        ((dataframe["pair_suffix"] == "H") & (dataframe["label"] != PUN_LABEL)) |
+        ((dataframe["pair_suffix"] == "N") & (dataframe["label"] != NON_PUN_LABEL)) |
+        (dataframe["pair_suffix"].isna())
+    ]
+
+    if len(invalid_rows) > 0:
+        display(invalid_rows.head(20))
+        raise ValueError(
+            f"{split_name}: existem exemplos em que o sufixo .H/.N "
+            f"não corresponde à label esperada."
+        )
+
+    print(f"{split_name}: suffix-label consistency OK.")
+
+
 validate_complete_pairs(train_df, "Train")
 validate_complete_pairs(validation_df, "Validation")
 validate_complete_pairs(test_df, "Test")
+
+validate_suffix_label_consistency(train_df, "Train")
+validate_suffix_label_consistency(validation_df, "Validation")
+validate_suffix_label_consistency(test_df, "Test")
 
 train_pair_ids = set(train_df["pair_id"])
 validation_pair_ids = set(validation_df["pair_id"])
@@ -344,11 +365,18 @@ train_pair_dataset = PairedPunDataset(train_pairs_df)
 validation_single_dataset = SingleTextDataset(validation_df)
 test_single_dataset = SingleTextDataset(test_df)
 
+PAIR_BATCH_SIZE = max(1, TRAIN_BATCH_SIZE // 2)
+
 train_pair_loader = DataLoader(
     train_pair_dataset,
-    batch_size=TRAIN_BATCH_SIZE,
+    batch_size=PAIR_BATCH_SIZE,
     shuffle=True,
     collate_fn=paired_collate_fn
+)
+
+print(
+    f"Train pair batch size: {PAIR_BATCH_SIZE} pairs "
+    f"= {PAIR_BATCH_SIZE * 2} texts per update"
 )
 
 validation_single_loader = DataLoader(
@@ -590,8 +618,12 @@ def apply_pairwise_decoding(predictions_df):
 
     return decoded_df
 
-best_validation_accuracy = -1.0
-best_validation_threshold = 0.0
+PRIMARY_THRESHOLD = 0.0
+
+best_validation_f1 = -1.0
+best_validation_accuracy_at_best_f1 = -1.0
+best_validation_threshold = PRIMARY_THRESHOLD
+
 best_model_state = None
 epochs_without_improvement = 0
 
@@ -701,33 +733,37 @@ for epoch in range(1, NUM_EPOCHS + 1):
     average_classification_loss = total_classification_loss / len(train_pair_loader)
     average_pair_loss = total_pair_loss / len(train_pair_loader)
 
-    validation_metrics_default, validation_predictions_df = evaluate_model(
+    validation_metrics, validation_predictions_df = evaluate_model(
         model=model,
         dataloader=validation_single_loader,
-        threshold=0.0
-    )
-
-    best_epoch_threshold, best_epoch_accuracy = find_best_threshold(
-        predictions_df=validation_predictions_df,
-        metric_name="accuracy"
-    )
-
-    validation_metrics, _ = evaluate_model(
-        model=model,
-        dataloader=validation_single_loader,
-        threshold=best_epoch_threshold
+        threshold=PRIMARY_THRESHOLD
     )
 
     current_validation_accuracy = validation_metrics["accuracy"]
-
     current_validation_f1 = validation_metrics["f1_macro"]
+
+    aux_epoch_threshold, aux_epoch_f1 = find_best_threshold(
+        predictions_df=validation_predictions_df,
+        metric_name="f1_macro"
+    )
+
+    aux_validation_metrics, _ = evaluate_model(
+        model=model,
+        dataloader=validation_single_loader,
+        threshold=aux_epoch_threshold
+    )
 
     epoch_record = {
         "epoch": epoch,
         "train_loss": average_loss,
         "train_classification_loss": average_classification_loss,
         "train_pair_loss": average_pair_loss,
-        "best_threshold": best_epoch_threshold,
+
+        "primary_threshold": PRIMARY_THRESHOLD,
+        "aux_best_threshold": aux_epoch_threshold,
+        "aux_validation_accuracy": aux_validation_metrics["accuracy"],
+        "aux_validation_f1_macro": aux_validation_metrics["f1_macro"],
+
         **{f"validation_{key}": value for key, value in validation_metrics.items()}
     }
 
@@ -740,9 +776,10 @@ for epoch in range(1, NUM_EPOCHS + 1):
         else:
             print(f"{key}: {value}")
 
-    if current_validation_accuracy > best_validation_accuracy:
-        best_validation_accuracy = current_validation_accuracy
-        best_validation_threshold = best_epoch_threshold
+    if current_validation_f1 > best_validation_f1:
+        best_validation_f1 = current_validation_f1
+        best_validation_accuracy_at_best_f1 = current_validation_accuracy
+        best_validation_threshold = PRIMARY_THRESHOLD
         epochs_without_improvement = 0
 
         best_model_state = {
@@ -750,8 +787,11 @@ for epoch in range(1, NUM_EPOCHS + 1):
             for key, value in model.state_dict().items()
         }
 
-        print(f"New best validation accuracy: {best_validation_accuracy:.4f}")
-        print(f"Best threshold: {best_validation_threshold:.4f}")
+        print(f"New best validation f1_macro: {best_validation_f1:.4f}")
+        print(
+            f"Validation accuracy at best f1_macro: "
+            f"{best_validation_accuracy_at_best_f1:.4f}"
+        )
 
     else:
         epochs_without_improvement += 1
@@ -775,8 +815,12 @@ if best_model_state is not None:
     model.load_state_dict(best_model_state)
     model.to(device)
 
-    print(f"Best validation accuracy restored: {best_validation_accuracy:.4f}")
-    print(f"Best validation threshold restored: {best_validation_threshold:.4f}")
+    print(f"Best validation f1_macro restored: {best_validation_f1:.4f}")
+    print(
+        f"Validation accuracy at best f1_macro restored: "
+        f"{best_validation_accuracy_at_best_f1:.4f}"
+    )
+    print(f"Primary threshold restored: {best_validation_threshold:.4f}")
 else:
     print("No best model state was stored.")
 
@@ -785,6 +829,48 @@ test_metrics, test_predictions_df = evaluate_model(
     dataloader=test_single_loader,
     threshold=best_validation_threshold
 )
+
+print("=== MAIN TEST RESULTS: standard binary classification ===")
+
+for metric_name, metric_value in test_metrics.items():
+    if isinstance(metric_value, float):
+        print(f"{metric_name}: {metric_value:.4f}")
+    else:
+        print(f"{metric_name}: {metric_value}")
+
+y_true = test_predictions_df["label"].tolist()
+y_pred = test_predictions_df["prediction"].tolist()
+
+print("\n=== MAIN CLASSIFICATION REPORT: standard binary classification ===")
+print(
+    classification_report(
+        y_true,
+        y_pred,
+        labels=[0, 1],
+        target_names=["0", "1"],
+        digits=2,
+        zero_division=0
+    )
+)
+
+cm = confusion_matrix(
+    y_true,
+    y_pred,
+    labels=[0, 1]
+)
+
+cm_df = pd.DataFrame(
+    cm,
+    index=["true_0", "true_1"],
+    columns=["pred_0", "pred_1"]
+)
+
+display(cm_df)
+
+print("\n=== AUXILIARY PAIR ANALYSIS: without changing predictions ===")
+print(f"Pair exact accuracy: {test_metrics['pair_exact_accuracy']:.4f}")
+print(f"Pair ranking accuracy: {test_metrics['pair_ranking_accuracy']:.4f}")
+print(f"Evaluated pairs: {test_metrics['evaluated_pairs']}")
 
 pairwise_test_predictions_df = apply_pairwise_decoding(
     test_predictions_df
@@ -799,15 +885,11 @@ pairwise_test_metrics.update(
     compute_pair_metrics(pairwise_test_predictions_df)
 )
 
-print("=== Standard threshold test results ===")
-
-for metric_name, metric_value in test_metrics.items():
-    if isinstance(metric_value, float):
-        print(f"{metric_name}: {metric_value:.4f}")
-    else:
-        print(f"{metric_name}: {metric_value}")
-
-print("\n=== Pairwise decoding test results ===")
+print("\n=== AUXILIARY ONLY: pairwise decoding results ===")
+print(
+    "Atenção: este resultado força cada par a ter uma previsão 1 e uma previsão 0. "
+    "Use apenas como análise auxiliar, não como resultado principal."
+)
 
 for metric_name, metric_value in pairwise_test_metrics.items():
     if isinstance(metric_value, float):
@@ -815,20 +897,34 @@ for metric_name, metric_value in pairwise_test_metrics.items():
     else:
         print(f"{metric_name}: {metric_value}")
 
-y_true = pairwise_test_predictions_df["label"].tolist()
-y_pred = pairwise_test_predictions_df["prediction"].tolist()
+pairwise_y_true = pairwise_test_predictions_df["label"].tolist()
+pairwise_y_pred = pairwise_test_predictions_df["prediction"].tolist()
 
-print("=== Classification report with pairwise decoding ===")
+print("\n=== AUXILIARY CLASSIFICATION REPORT: pairwise decoding ===")
 print(
     classification_report(
-        y_true,
-        y_pred,
+        pairwise_y_true,
+        pairwise_y_pred,
         labels=[0, 1],
         target_names=["0", "1"],
         digits=2,
         zero_division=0
     )
 )
+
+pairwise_cm = confusion_matrix(
+    pairwise_y_true,
+    pairwise_y_pred,
+    labels=[0, 1]
+)
+
+pairwise_cm_df = pd.DataFrame(
+    pairwise_cm,
+    index=["true_0", "true_1"],
+    columns=["pred_0", "pred_1"]
+)
+
+display(pairwise_cm_df)
 
 cm = confusion_matrix(
     y_true,

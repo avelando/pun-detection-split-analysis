@@ -1,0 +1,19 @@
+# Pastas antigas
+BERTimbau/
+ensemble/
+relatorio_splits/
+
+# Arquivo antigo
+main.py
+
+# Ambiente virtual
+venv/
+.venv/
+
+# Cache Python
+__pycache__/
+**/__pycache__/
+*.pyc
+
+# Notebooks cache
+.ipynb_checkpoints/

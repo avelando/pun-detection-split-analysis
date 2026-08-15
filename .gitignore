@@ -17,3 +17,5 @@ __pycache__/
 
 # Notebooks cache
 .ipynb_checkpoints/
+
+results/

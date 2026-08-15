@@ -1,0 +1,6 @@
+strategy,seed,total_examples,total_pairs,train_examples,validation_examples,test_examples,cross_split_pairs,cross_split_rate
+max_cross_split,13,5700,2850,3990,570,1140,1710,0.6
+max_cross_split,21,5700,2850,3990,570,1140,1710,0.6
+max_cross_split,40,5700,2850,3990,570,1140,1710,0.6
+max_cross_split,42,5700,2850,3990,570,1140,1710,0.6
+max_cross_split,73,5700,2850,3990,570,1140,1710,0.6

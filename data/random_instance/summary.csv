@@ -1,6 +1,0 @@
-strategy,seed,total_examples,total_pairs,train_examples,validation_examples,test_examples,cross_split_pairs,cross_split_rate
-random_instance,13,5700,2850,3990,570,1140,1329,0.4663157894736842
-random_instance,21,5700,2850,3990,570,1140,1291,0.4529824561403509
-random_instance,40,5700,2850,3990,570,1140,1303,0.4571929824561404
-random_instance,42,5700,2850,3990,570,1140,1326,0.4652631578947368
-random_instance,73,5700,2850,3990,570,1140,1316,0.4617543859649123

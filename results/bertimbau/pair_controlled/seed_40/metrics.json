@@ -1,0 +1,16 @@
+{
+  "accuracy": 0.756140350877193,
+  "precision_macro": 0.7571661660548077,
+  "recall_macro": 0.756140350877193,
+  "f1_macro": 0.7558969239869862,
+  "precision_weighted": 0.7571661660548077,
+  "recall_weighted": 0.756140350877193,
+  "f1_weighted": 0.755896923986986,
+  "tp": 413,
+  "tn": 449,
+  "fp": 121,
+  "fn": 157,
+  "test_loss": 0.6460131406784058,
+  "best_validation_f1_macro": 0.7451237375684219,
+  "train_runtime": 981.6578
+}

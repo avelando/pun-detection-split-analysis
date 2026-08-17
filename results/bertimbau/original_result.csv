@@ -1,0 +1,2 @@
+condition,split_seed,model_seed,accuracy,precision_macro,recall_macro,f1_macro,precision_weighted,recall_weighted,f1_weighted,tp,tn,fp,fn,test_loss,best_validation_f1_macro,train_runtime,fn_instances,annotated_fn_instances,missing_fn_annotations,none,homophone_only,homograph_only,both,total_punning_signs_in_fn
+original,,40,0.706140350877193,0.7244989625617184,0.706140350877193,0.7000073053994758,0.7244989625617183,0.706140350877193,0.7000073053994756,484,321,249,86,0.6184712648391724,0.7037793027449408,555.6506,86,86,0,32,17,0,39,88

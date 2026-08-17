@@ -1,0 +1,12 @@
+condition,split_seed,model_seed,tp,tn,fp,fn
+original,,40,484,321,249,86
+pair_controlled,13,40,418,456,114,152
+pair_controlled,21,40,407,462,108,163
+pair_controlled,40,40,413,449,121,157
+pair_controlled,42,40,423,439,131,147
+pair_controlled,73,40,383,479,91,187
+max_cross_split,13,40,384,411,159,186
+max_cross_split,21,40,352,456,114,218
+max_cross_split,40,40,420,386,184,150
+max_cross_split,42,40,341,442,128,229
+max_cross_split,73,40,355,390,180,215

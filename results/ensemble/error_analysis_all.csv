@@ -1,0 +1,12 @@
+condition,split_seed,model_seed,fn_instances,annotated_fn_instances,missing_fn_annotations,none,homophone_only,homograph_only,both,total_punning_signs_in_fn
+original,,40,120,120,0,71,24,1,26,122
+pair_controlled,13,40,436,436,0,276,89,1,77,443
+pair_controlled,21,40,356,356,0,230,67,1,66,364
+pair_controlled,40,40,408,408,0,253,81,1,83,418
+pair_controlled,42,40,446,446,0,291,90,1,75,457
+pair_controlled,73,40,444,444,0,288,92,0,76,456
+max_cross_split,13,40,22,22,0,17,4,0,3,24
+max_cross_split,21,40,12,12,0,6,3,0,5,14
+max_cross_split,40,40,22,22,0,22,2,0,2,26
+max_cross_split,42,40,22,22,0,12,7,0,4,23
+max_cross_split,73,40,19,19,0,8,3,0,8,19

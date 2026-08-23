@@ -1,0 +1,35 @@
+{
+  "model": "ensemble_leal_baseline",
+  "condition": "max_cross_split",
+  "split_seed": 101,
+  "model_seed": 40,
+  "input_directory": "/home/avelar/pun-detection-split-analysis/data/max_cross_split/seed_101",
+  "train_examples": 3990,
+  "validation_examples": 570,
+  "test_examples": 1140,
+  "tfidf_ngram_range": [
+    1,
+    2
+  ],
+  "portuguese_stopwords": true,
+  "random_forest": {
+    "n_estimators": 100,
+    "criterion": "entropy",
+    "max_depth": 15,
+    "random_state": 40
+  },
+  "logistic_regression": {
+    "random_state": 40,
+    "max_iter": 100
+  },
+  "svm": {
+    "probability": true,
+    "random_state": 40
+  },
+  "voting": "soft",
+  "n_jobs": 30,
+  "python": "3.14.4",
+  "numpy": "2.5.2",
+  "pandas": "3.0.5",
+  "scikit_learn": "1.9.0"
+}

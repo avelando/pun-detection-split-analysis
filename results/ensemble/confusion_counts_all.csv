@@ -5,8 +5,10 @@ pair_controlled,21,40,214,318,252,356
 pair_controlled,40,40,162,368,202,408
 pair_controlled,42,40,124,413,157,446
 pair_controlled,73,40,126,404,166,444
+pair_controlled,101,40,134,423,147,436
 max_cross_split,13,40,548,549,21,22
 max_cross_split,21,40,558,543,27,12
 max_cross_split,40,40,548,543,27,22
 max_cross_split,42,40,548,546,24,22
 max_cross_split,73,40,551,542,28,19
+max_cross_split,101,40,542,549,21,28

@@ -1,5 +1,11 @@
 {
   "accuracy": 0.6973684210526315,
+  "precision_non_pun": 0.6884422110552764,
+  "recall_non_pun": 0.7210526315789474,
+  "f1_non_pun": 0.7043701799485861,
+  "precision_pun": 0.7071823204419889,
+  "recall_pun": 0.6736842105263158,
+  "f1_pun": 0.6900269541778976,
   "precision_macro": 0.6978122657486326,
   "recall_macro": 0.6973684210526316,
   "f1_macro": 0.6971985670632419,
@@ -12,5 +18,5 @@
   "fn": 186,
   "test_loss": 0.5658262968063354,
   "best_validation_f1_macro": 0.6910911576691423,
-  "train_runtime": 490.3007
+  "train_runtime": 716.2158
 }

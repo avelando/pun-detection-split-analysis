@@ -1,458 +1,368 @@
-# Portuguese Pun Detection
+# Portuguese Pun Detection — When the Split Matters
 
-This repository contains the source code, corpora, and experimental materials used to reproduce experiments for automatic pun detection in Portuguese.
+This repository contains the source code, corpora, experimental artifacts, and
+reproducibility materials for the study on how the **organization of the
+train/validation/test splits** affects automatic **pun detection in Portuguese**.
 
-The task is formulated as a binary classification problem:
+The task is a binary classification problem:
 
 - `0`: non-pun text;
 - `1`: pun text.
 
-The main objective is to evaluate how different corpus organizations affect the performance of pun detection models. Two experimental scenarios are considered:
+The corpus is built from micro-edited pairs: every pun has a minimally edited
+non-pun counterpart that shares the same **Base Identifier (IDB)**. The central
+question of this study is what happens to model evaluation when the two versions
+of a pair are allowed to fall into different partitions (training vs. test)
+versus when they are forced to stay together. To isolate that effect, the
+experiments compare split strategies at two extremes and run each one over
+multiple random seeds, so the reported differences can be read against their
+variance rather than a single lucky split.
 
-1. **Original corpus**: the original train, validation, and test splits.
-2. **Reorganized corpus**: a split reorganized by base identifier, ensuring that related pun and non-pun versions remain in the same partition.
+Two models are evaluated under every configuration:
 
-Each model was executed with the corresponding corpus version in order to reproduce the reported results. Therefore, the BERTimbau-based model and the ensemble model were both evaluated on the original corpus and on the reorganized corpus.
+- a neural baseline based on **BERTimbau large** (`neuralmind/bert-large-portuguese-cased`);
+- an **ensemble** of traditional classifiers (Random Forest + Logistic Regression + SVM over TF-IDF), following the lower-cost setting explored by Leal et al.
 
 ---
 
-## Repository Structure
+## Table of Contents
+
+1. [Project Structure](#1-project-structure)
+2. [Library Versions](#2-library-versions)
+3. [Execution Environment (Hardware)](#3-execution-environment-hardware)
+4. [Citing the Puntuguese Corpus](#4-citing-the-puntuguese-corpus)
+5. [Citing This Work](#5-citing-this-work)
+6. [Reproducing the Experiments](#6-reproducing-the-experiments)
+7. [Data Format](#7-data-format)
+8. [License](#8-license)
+
+---
+
+## 1. Project Structure
 
 ```text
 .
-├── data/
-│   ├── original/
+├── data/                              # All corpora and split bookkeeping
+│   ├── puns.json                      # Full raw source corpus (all pun/non-pun instances)
+│   ├── split_comparison.csv           # Cross-split pair rate per strategy/seed (incl. original)
+│   ├── split_summary.csv              # Per-strategy/seed split sizes and cross-split counts
+│   │
+│   ├── original/                      # Original Puntuguese split (as distributed)
 │   │   ├── train.jsonl
 │   │   ├── validation.jsonl
 │   │   └── test.jsonl
 │   │
-│   └── reorganized/
-│       ├── train.jsonl
-│       ├── validation.jsonl
-│       └── test.jsonl
+│   ├── pair_controlled/               # "Clean" strategy: pairs never cross splits (cross-split rate = 0.0)
+│   │   ├── summary.csv                # Summary across all seeds for this strategy
+│   │   └── seed_<13|21|40|42|73|101>/ # One folder per random seed
+│   │       ├── train.jsonl
+│   │       ├── validation.jsonl
+│   │       ├── test.jsonl
+│   │       ├── metadata.json          # Strategy, seed, sizes, class distribution, cross-split stats
+│   │       ├── pair_matrix.csv        # Split-by-split cross-tabulation of pun/non-pun versions
+│   │       └── inspection.csv         # Per-example split assignment (auditing)
+│   │
+│   └── max_cross_split/               # "Leaky" strategy: maximizes pairs crossing splits (rate = 0.6)
+│       ├── summary.csv
+│       └── seed_<13|21|40|42|73|101>/ # Same file layout as pair_controlled
+│
+├── results/                          # Experimental outputs
+│   ├── bertimbau/
+│   │   ├── all_runs.csv               # Every run (all strategies/seeds) in one table
+│   │   ├── confusion_counts_all.csv   # TP/TN/FP/FN for every run
+│   │   ├── error_analysis_all.csv     # Punning-sign categories of false negatives, all runs
+│   │   ├── summary_mean_std.csv       # Mean ± std per strategy across seeds
+│   │   ├── original_result.csv        # Single-run result on the original corpus
+│   │   ├── original/                  # Full artifacts for the original-corpus run
+│   │   ├── pair_controlled/
+│   │   │   ├── runs.csv               # Per-seed summary for this strategy
+│   │   │   └── seed_<...>/            # Full artifacts for each seed (see below)
+│   │   └── max_cross_split/
+│   │       ├── runs.csv
+│   │       └── seed_<...>/
+│   │
+│   └── ensemble/                      # Same layout as bertimbau/ (with saved models)
+│       └── ...
 │
 ├── src/
 │   ├── data/
-│   │   ├── make_reorganized_split.py
-│   │   └── make_reorganized_split.ipynb
-│   │
+│   │   └── make_reorganized_split.ipynb   # Builds the pair_controlled / max_cross_split corpora
 │   └── models/
-│       ├── train_bertimbau.py
-│       ├── train_bertimbau.ipynb
-│       ├── train_ensemble.py
-│       └── train_ensemble.ipynb
+│       ├── train_bertimbau.ipynb          # Trains + evaluates the BERTimbau baseline
+│       └── train_ensemble.ipynb           # Trains + evaluates the traditional ensemble
 │
 ├── .gitignore
-├── requirements.txt
+├── requirements.txt                  # Pinned runtime dependencies
+├── LICENSE                           # MIT license (source code)
+├── LICENSE-DATA                      # CC-BY-SA-4.0 notice (corpus/data, inherited from Puntuguese)
 └── README.md
 ```
 
----
+### What each per-seed result folder contains
 
-## Data
+Every `results/<model>/<strategy>/seed_<n>/` folder holds the complete evidence
+for one run, so any number in the paper can be traced back to its source:
 
-The `data/` directory contains the corpus files used in the experiments.
+| File | Description |
+|---|---|
+| `metrics.json` | Accuracy, per-class precision/recall/F1, macro/weighted averages |
+| `classification_report.csv` | The same metrics in tabular form |
+| `confusion_matrix.csv` | Full 2×2 confusion matrix |
+| `confusion_counts.csv` | TP / TN / FP / FN counts |
+| `error_analysis.csv` | Punning-sign categories among false negatives (none / homophone / homograph / both) |
+| `error_analysis.png` | Chart of the error analysis above |
+| `metadata.json` | Full run configuration (model, seeds, hyperparameters, hardware, library versions) |
+| `training_history.csv` | Per-epoch training/validation curve **(BERTimbau only)** |
+| `ensemble.joblib` | Serialized trained ensemble model **(ensemble only)** |
 
-### Original corpus
+### The three split strategies at a glance
 
-The original split is stored in:
+| Strategy | Cross-split pairs | Cross-split rate | Role in the study |
+|---|---:|---:|---|
+| `original` | 1306 | 0.458 | The corpus as originally distributed |
+| `pair_controlled` | 0 | 0.000 | Clean evaluation — each pair stays in one split |
+| `max_cross_split` | 1710 | 0.600 | Stress test — deliberately maximizes pairs crossing splits |
 
-```text
-data/original/
-```
-
-It contains:
-
-```text
-train.jsonl
-validation.jsonl
-test.jsonl
-```
-
-This version corresponds to the original experimental scenario.
-
-### Reorganized corpus
-
-The reorganized split is stored in:
-
-```text
-data/reorganized/
-```
-
-It contains:
-
-```text
-train.jsonl
-validation.jsonl
-test.jsonl
-```
-
-In this version, examples related by the same base identifier are kept in the same partition. This prevents highly similar pun and non-pun versions from being distributed across different splits, such as training and test sets.
+All strategies keep the same overall sizes (3990 train / 570 validation / 1140
+test) and the same 50/50 class balance in every partition.
 
 ---
 
-## Source Code
+## 2. Library Versions
 
-The source code is organized under the `src/` directory.
+All experiments were run on **Python 3.14.4**. The pinned versions live in
+[`requirements.txt`](requirements.txt); the table below groups the main
+libraries by the stage that uses them.
 
----
+### Split reorganization (`src/data/make_reorganized_split.ipynb`)
 
-### `src/data/make_reorganized_split.py`
+| Library | Version | Role |
+|---|---|---|
+| numpy | 2.5.2 | Shuffling / numeric operations |
+| pandas | 3.0.5 | Reading, grouping and writing the split tables |
 
-This script is responsible for generating the reorganized version of the corpus.
+(Plus the Python standard library: `json`, `re`, `pathlib`.)
 
-It performs the following steps:
+### BERTimbau training (`src/models/train_bertimbau.ipynb`)
 
-- reads the original `train.jsonl`, `validation.jsonl`, and `test.jsonl` files;
-- extracts the base identifier from each example;
-- groups related pun and non-pun examples by their base identifier;
-- redistributes the grouped pairs into train, validation, and test partitions;
-- preserves proportions compatible with the original corpus organization;
-- ensures that related examples are not split across different partitions;
-- writes the reorganized files to `data/reorganized/`.
+| Library | Version | Role |
+|---|---|---|
+| torch | 2.13.0 (`+cu130`) | Neural training backend |
+| transformers | 5.15.0 | BERTimbau model, tokenizer, `Trainer` |
+| accelerate | 1.14.0 | Training loop / device placement backend for `Trainer` |
+| scikit-learn | 1.9.0 | Evaluation metrics |
+| numpy | 2.5.2 | Numeric operations |
+| pandas | 3.0.5 | Result tables |
+| matplotlib | 3.11.1 | Error-analysis charts |
 
-A notebook version is also available:
+### Ensemble training (`src/models/train_ensemble.ipynb`)
 
-```text
-src/data/make_reorganized_split.ipynb
-```
+| Library | Version | Role |
+|---|---|---|
+| scikit-learn | 1.9.0 | TF-IDF, Random Forest, Logistic Regression, SVM, soft-voting ensemble, metrics |
+| nltk | 3.10.3 | Portuguese stopword removal |
+| joblib | 1.5.3 | Saving the trained ensemble (`ensemble.joblib`) |
+| numpy | 2.5.2 | Numeric operations |
+| pandas | 3.0.5 | Result tables |
+| matplotlib | 3.11.1 | Error-analysis charts |
 
-The notebook is provided for inspection and interactive execution.
-
----
-
-### `src/models/train_bertimbau.py`
-
-This script trains and evaluates a BERTimbau-based classifier for binary pun detection.
-
-It performs the following steps:
-
-- reads the corpus files from the expected input directory;
-- loads the training, validation, and test sets;
-- tokenizes the texts;
-- trains a neural classifier based on BERTimbau;
-- evaluates the model on the test set;
-- reports accuracy, precision, recall, and F1-score;
-- displays the confusion matrix.
-
-A notebook version is also available:
-
-```text
-src/models/train_bertimbau.ipynb
-```
-
-The notebook version can be used for interactive analysis or execution in environments such as Jupyter or Google Colab.
+> Full pinned list (including `scipy==1.18.0`, `ipykernel==7.3.0`) is in
+> `requirements.txt`. For GPU execution of BERTimbau, make sure the installed
+> PyTorch build matches your local CUDA version.
 
 ---
 
-### `src/models/train_ensemble.py`
+## 3. Execution Environment (Hardware)
 
-This script trains and evaluates an ensemble of traditional machine learning classifiers.
+The experiments were executed on a single Linux workstation with the following
+main components:
 
-It performs the following steps:
+| Component | Value |
+|---|---|
+| Operating system | Ubuntu 26.04 LTS (Resolute Raccoon) |
+| Kernel | 7.0.0-28-generic |
+| CPU | Intel Core i5-10400F @ 2.90 GHz (6 cores / 12 threads) |
+| RAM | 62 GB (64 GiB) + 8 GiB swap |
+| GPU | NVIDIA GeForce RTX 3060 |
+| CUDA runtime | 13.0 |
+| cuDNN | 9.2.0 |
+| Python | 3.14.4 |
+| PyTorch | 2.13.0 (`+cu130`) |
 
-- reads the corpus files from the expected input directory;
-- converts the texts into TF-IDF representations;
-- trains traditional supervised classifiers;
-- combines the classifiers using an ensemble strategy;
-- evaluates the final model on the test set;
-- reports classification metrics.
+The GPU/CUDA/runtime values are also recorded automatically in every run's
+`metadata.json` file.
 
-A notebook version is also available:
+### Commands to inspect your own environment
 
-```text
-src/models/train_ensemble.ipynb
-```
-
----
-
-## Installation
-
-It is recommended to create a virtual environment before installing the dependencies.
-
-### Windows PowerShell
-
-```powershell
-python -m venv venv
-.\venv\Scripts\activate
-pip install -r requirements.txt
-```
-
-### Linux/macOS
+To reproduce on different hardware, you can inspect your environment with:
 
 ```bash
+# OS and kernel
+cat /etc/os-release            # distribution name and version
+uname -r                       # kernel version
+
+# CPU
+lscpu | grep -E 'Model name|^CPU\(s\):|Socket|Core|Thread'
+
+# Memory
+free -h                        # total / available RAM
+
+# Disk (optional)
+df -h --total | tail -1
+
+# GPU / CUDA (NVIDIA)
+nvidia-smi                     # GPU model + driver + CUDA driver version
+nvcc --version                 # CUDA toolkit version (if the toolkit is installed)
+
+# Python and key libraries
+python --version
+python -c "import torch; print('torch', torch.__version__, 'cuda', torch.version.cuda, 'gpu', torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU')"
+```
+
+---
+
+## 4. Citing the Puntuguese Corpus
+
+This work builds on the **Puntuguese** corpus. If you use the data, please cite
+the original resource:
+
+```bibtex
+@inproceedings{inacio-etal-2024-puntuguese,
+    title     = "Puntuguese: A Corpus of Puns in {P}ortuguese with Micro-edits",
+    author    = "Inacio, Marcio Lima  and
+                 Wick-Pedro, Gabriela  and
+                 Ramisch, Renata  and
+                 Esp{\'i}rito Santo, Lu{\'i}s  and
+                 Chacon, Xiomara S. Q.  and
+                 Santos, Roney  and
+                 Sousa, Rog{\'e}rio  and
+                 Anchi{\^e}ta, Rafael  and
+                 Goncalo Oliveira, Hugo",
+    editor    = "Calzolari, Nicoletta  and
+                 Kan, Min-Yen  and
+                 Hoste, Veronique  and
+                 Lenci, Alessandro  and
+                 Sakti, Sakriani  and
+                 Xue, Nianwen",
+    booktitle = "Proceedings of the 2024 Joint International Conference on Computational Linguistics, Language Resources and Evaluation (LREC-COLING 2024)",
+    month     = may,
+    year      = "2024",
+    address   = "Torino, Italia",
+    publisher = "ELRA and ICCL",
+    url       = "https://aclanthology.org/2024.lrec-main.1167/",
+    pages     = "13332--13343"
+}
+```
+
+- Corpus: <https://huggingface.co/datasets/Superar/Puntuguese>
+- Paper: <https://aclanthology.org/2024.lrec-main.1167/>
+
+---
+
+## 5. Citing This Work
+
+If you use this repository — the reorganized splits, the code, or the results —
+please cite the paper associated with it:
+
+```bibtex
+@inproceedings{avelar2026split,
+    title     = {When the Split Matters: Reorganizing Micro-Edited Pairs for Portuguese Pun Detection},
+    author    = {TODO: Author One and Author Two and Author Three},
+    booktitle = {Anais do Encontro Nacional de Intelig{\^e}ncia Artificial e Computacional (ENIAC 2026)},
+    year      = {2026},
+    publisher = {Sociedade Brasileira de Computa{\c c}{\~a}o (SBC)},
+    address   = {TODO: City, Brazil},
+    note      = {To appear}
+    % pages   = {TODO},
+    % doi     = {TODO},
+    % url     = {TODO}
+}
+```
+
+> **Fill in before publishing:** replace the `author` list with the final author
+> names, and add `address`, `pages`, `doi`, and `url` once the ENIAC 2026
+> proceedings are published on the SBC Open Library (SOL). You may also want to
+> rename the BibTeX key (`avelar2026split`) to match your group's convention.
+
+---
+
+## 6. Reproducing the Experiments
+
+### Installation
+
+```bash
+# Linux/macOS
 python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 ```
 
----
-
-## Dependencies
-
-The project dependencies are listed in:
-
-```text
-requirements.txt
-```
-
-Install them with:
-
-```bash
+```powershell
+# Windows PowerShell
+python -m venv venv
+.\venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-A compatible `requirements.txt` should include the main libraries used by the scripts, such as:
+### 1. (Re)generate the splits
 
-```text
-numpy
-pandas
-scikit-learn
-scipy
-nltk
-torch
-transformers
-tqdm
-jupyter
-ipykernel
-```
+Run `src/data/make_reorganized_split.ipynb`. It reads the source corpus,
+extracts the IDB from each instance, and produces both split strategies
+(`pair_controlled` and `max_cross_split`) for every seed under `data/`.
 
-For GPU-based execution of BERTimbau, make sure that the installed PyTorch version is compatible with the local CUDA version.
+### 2. Train and evaluate the models
+
+Run the notebooks under `src/models/` for each condition:
+
+- `train_bertimbau.ipynb` — BERTimbau baseline;
+- `train_ensemble.ipynb` — traditional ensemble.
+
+Each notebook writes its metrics and artifacts under the matching
+`results/<model>/<strategy>/seed_<n>/` folder. Aggregated tables
+(`summary_mean_std.csv`, `all_runs.csv`) are produced from those per-run files.
+
+### Expected results (mean ± std over 6 seeds)
+
+| Model | `pair_controlled` (clean) | `max_cross_split` (leaky) |
+|---|---|---|
+| BERTimbau (accuracy) | 0.756 ± 0.010 | 0.691 ± 0.020 |
+| Ensemble (accuracy) | 0.471 ± 0.009 | 0.960 ± 0.003 |
+
+BERTimbau is slightly **better** under the clean split, while the ensemble's
+apparent strength collapses once micro-edited pairs are prevented from crossing
+splits — dropping below the 0.50 majority-class baseline. Small variations may
+occur depending on hardware, library versions, and random initialization.
 
 ---
 
-## Data Format
+## 7. Data Format
 
-The corpus files use the JSONL format. Each line corresponds to one independent JSON object.
-
-A typical example follows this structure:
+The corpus files use the JSONL format. Each line is one independent JSON object:
 
 ```json
-{
-  "id": "1.3.H",
-  "text": "Example text",
-  "label": 1
-}
+{ "id": "1.3.H", "text": "Example text", "label": 1 }
 ```
-
-### Expected fields
 
 | Field | Description |
 |---|---|
-| `id` | Example identifier |
+| `id` | Example identifier. The suffix `.H` marks a pun and `.N` its non-pun counterpart; the shared prefix is the Base Identifier (IDB) |
 | `text` | Text to be classified |
-| `label` | Binary label: `0` for non-pun and `1` for pun |
+| `label` | Binary label: `0` for non-pun, `1` for pun |
 
 ---
 
-## Reproducing the Experiments
-
-The training scripts expect the corpus files to be available in a directory named `corpus/`, with the following structure:
-
-```text
-corpus/
-├── train.jsonl
-├── validation.jsonl
-└── test.jsonl
-```
-
-Before running each experiment, copy the desired corpus version into the `corpus/` directory.
-
----
-
-# Experiments with the Original Corpus
-
-## 1. Prepare the original corpus
-
-### Windows PowerShell
-
-```powershell
-Remove-Item -Recurse -Force corpus -ErrorAction SilentlyContinue
-New-Item -ItemType Directory -Path corpus
-
-Copy-Item data\original\train.jsonl corpus\train.jsonl
-Copy-Item data\original\validation.jsonl corpus\validation.jsonl
-Copy-Item data\original\test.jsonl corpus\test.jsonl
-```
-
-### Linux/macOS
-
-```bash
-rm -rf corpus
-mkdir corpus
-
-cp data/original/train.jsonl corpus/train.jsonl
-cp data/original/validation.jsonl corpus/validation.jsonl
-cp data/original/test.jsonl corpus/test.jsonl
-```
-
----
-
-## 2. Run BERTimbau on the original corpus
-
-```bash
-python src/models/train_bertimbau.py
-```
-
----
-
-## 3. Run the ensemble on the original corpus
-
-```bash
-python src/models/train_ensemble.py
-```
-
----
-
-# Experiments with the Reorganized Corpus
-
-## 1. Prepare the reorganized corpus
-
-### Windows PowerShell
-
-```powershell
-Remove-Item -Recurse -Force corpus -ErrorAction SilentlyContinue
-New-Item -ItemType Directory -Path corpus
-
-Copy-Item data\reorganized\train.jsonl corpus\train.jsonl
-Copy-Item data\reorganized\validation.jsonl corpus\validation.jsonl
-Copy-Item data\reorganized\test.jsonl corpus\test.jsonl
-```
-
-### Linux/macOS
-
-```bash
-rm -rf corpus
-mkdir corpus
-
-cp data/reorganized/train.jsonl corpus/train.jsonl
-cp data/reorganized/validation.jsonl corpus/validation.jsonl
-cp data/reorganized/test.jsonl corpus/test.jsonl
-```
-
----
-
-## 2. Run BERTimbau on the reorganized corpus
-
-```bash
-python src/models/train_bertimbau.py
-```
-
----
-
-## 3. Run the ensemble on the reorganized corpus
-
-```bash
-python src/models/train_ensemble.py
-```
-
----
-
-## Expected Results
-
-The experiments compare two models across two corpus configurations.
-
-| Corpus | Model | Accuracy |
-|---|---:|---:|
-| Original | Ensemble | 0.80 |
-| Original | BERTimbau | 0.68 |
-| Reorganized | Ensemble | 0.46 |
-| Reorganized | BERTimbau | 0.76 |
-
-Small variations may occur depending on the execution environment, library versions, hardware, GPU availability, and random initialization.
-
----
-
-## Recreating the Reorganized Corpus
-
-The reorganized corpus is already available in:
-
-```text
-data/reorganized/
-```
-
-To recreate it, run:
-
-```bash
-python src/data/make_reorganized_split.py
-```
-
-The expected output is:
-
-```text
-data/reorganized/train.jsonl
-data/reorganized/validation.jsonl
-data/reorganized/test.jsonl
-```
-
-Before running the script, verify that the input and output paths are correctly configured in the source code.
-
----
-
-## Notes on the Notebooks
-
-Notebook files are provided as auxiliary material for interactive inspection and reproduction.
-
-For automated or terminal-based reproduction, prefer using the `.py` scripts:
-
-```text
-src/data/make_reorganized_split.py
-src/models/train_bertimbau.py
-src/models/train_ensemble.py
-```
-
-The notebooks may be useful for:
-
-- inspecting intermediate steps;
-- validating corpus distributions;
-- checking model outputs;
-- adapting the experiments;
-- running the workflow in notebook-based environments.
-
----
-
-## Version Control
-
-The `.gitignore` file is used to avoid tracking unnecessary files, temporary files, caches, virtual environments, and old project folders.
-
-Examples of ignored files and directories include:
-
-```text
-venv/
-.venv/
-__pycache__/
-*.pyc
-.ipynb_checkpoints/
-BERTimbau/
-ensemble/
-relatorio_splits/
-main.py
-```
-
-This keeps the repository cleaner and avoids uploading unnecessary files to GitHub.
-
----
-
-## Reproduction Summary
-
-To reproduce the experiments:
-
-1. Create and activate a virtual environment.
-2. Install the dependencies from `requirements.txt`.
-3. Copy the desired corpus version into the `corpus/` directory.
-4. Run the BERTimbau script.
-5. Run the ensemble script.
-6. Repeat the process for the other corpus version.
-7. Compare the results obtained for each model and corpus scenario.
-
----
-
-## Research Use
-
-This repository is intended for research reproducibility and experimental documentation. The provided scripts and corpus organization allow the comparison of model performance under different split configurations for Portuguese pun detection.
-
----
-
-## License
-
-This repository is made available for research and experimental reproduction purposes.
+## 8. License
+
+This repository uses a **dual license**, because the data and the code have
+different origins:
+
+- **Source code** (everything under `src/`, and the scripts/notebooks) is
+  released under the **MIT License** — see [`LICENSE`](LICENSE).
+- **Data** (everything under `data/`) is derived from the Puntuguese corpus,
+  which is licensed under **CC-BY-SA-4.0**. Because of the *ShareAlike* clause,
+  the data in this repository is also distributed under **CC-BY-SA-4.0** and must
+  keep the same license and attribution in any derivative — see
+  [`LICENSE-DATA`](LICENSE-DATA).
+
+If you redistribute or adapt the data, you must credit both the Puntuguese
+authors (Section 4) and this work (Section 5), and keep the CC-BY-SA-4.0 license.

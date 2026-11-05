@@ -279,13 +279,6 @@ please cite the paper associated with it:
     url = {https://sol.sbc.org.br/index.php/eniac/article/view/46925}
 }
 
-```
-
-> **Fill in before publishing:** replace the `author` list with the final author
-> names, and add `address`, `pages`, `doi`, and `url` once the ENIAC 2026
-> proceedings are published on the SBC Open Library (SOL). You may also want to
-> rename the BibTeX key (`avelar2026split`) to match your group's convention.
-
 ---
 
 ## 6. Reproducing the Experiments

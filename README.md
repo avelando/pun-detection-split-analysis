@@ -266,17 +266,19 @@ please cite the paper associated with it:
 
 ```bibtex
 @inproceedings{avelar2026split,
-    title     = {When the Split Matters: Reorganizing Micro-Edited Pairs for Portuguese Pun Detection},
-    author    = {TODO: Author One and Author Two and Author Three},
-    booktitle = {Anais do Encontro Nacional de Intelig{\^e}ncia Artificial e Computacional (ENIAC 2026)},
-    year      = {2026},
-    publisher = {Sociedade Brasileira de Computa{\c c}{\~a}o (SBC)},
-    address   = {TODO: City, Brazil},
-    note      = {To appear}
-    % pages   = {TODO},
-    % doi     = {TODO},
-    % url     = {TODO}
+    author = {Avelar Rodrigues de Sousa and Maykon Willyam de Sousa Ferreira and Victor Oliveira Lima Pontes and Rafael Torres Anchiêta},
+    title = { When the Split Matters: Reorganizing Micro-Edited Pairs for Portuguese Pun Detection},
+    booktitle = {Anais do XXIII Encontro Nacional de Inteligência Artificial e Computacional},
+    location = {Cuiabá/MT},
+    year = {2026},
+    issn = {2763-9061},
+    pages = {1792--1803},
+    publisher = {SBC},
+    address = {Porto Alegre, RS, Brasil},
+    doi = {10.5753/eniac.2026.31369},
+    url = {https://sol.sbc.org.br/index.php/eniac/article/view/46925}
 }
+
 ```
 
 > **Fill in before publishing:** replace the `author` list with the final author
